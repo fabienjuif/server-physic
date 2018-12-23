@@ -50,7 +50,7 @@ fn create_balls (world: &mut World<f32>, num: usize) -> Vec<ColliderHandle> {
 
     // let geom = ShapeHandle::new(Ball::new(rad - COLLIDER_MARGIN));
     let geom = ShapeHandle::new(Cuboid::new(Vector2::new(rad - COLLIDER_MARGIN, rad - COLLIDER_MARGIN)));
-    let inertia = Inertia2::new(1.0, 0.0);
+    let inertia = Inertia2::new(1.0, 3.0);
     let center_of_mass = geom.center_of_mass();
 
     let mut handlers = vec![];
@@ -59,6 +59,9 @@ fn create_balls (world: &mut World<f32>, num: usize) -> Vec<ColliderHandle> {
 
         let pos = Isometry2::new(Vector2::new(x, 3.0), 0.0);
         let handle = world.add_rigid_body(pos, inertia, center_of_mass);
+        let body = world.rigid_body_mut(handle).unwrap();
+        body.disable_rotations();
+        // WORKS TO: body.set_local_inertia(Inertia2::new(1.0, 0.0));
 
         handlers.push(world.add_collider(
             COLLIDER_MARGIN,

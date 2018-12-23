@@ -5,8 +5,8 @@ authors = ["Fabien JUIF <fabien.juif@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-nphysics2d = "0.9.4"
+nphysics2d = { path = "../nphysics/build/nphysics2d" }
 nalgebra = "0.16.12"
 ncollide2d = "0.17.3"
-nphysics_testbed2d = "0.3.0"
+nphysics_testbed2d = { path = "../nphysics/nphysics_testbed2d" }
 kiss3d = "0.17.0"
