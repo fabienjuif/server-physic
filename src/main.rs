@@ -4,14 +4,17 @@ extern crate nphysics2d;
 extern crate nphysics_testbed2d;
 
 use std::collections::HashSet;
+use std::rc::Rc;
+use std::{thread, time};
+use std::sync::mpsc::{self, Sender};
 
 use na::{Isometry2, Point2, Vector2};
-use ncollide2d::shape::{Ball, Cuboid, ShapeHandle};
+use ncollide2d::shape::{Cuboid, ShapeHandle};
 use ncollide2d::events::{ContactEvent};
 use nphysics2d::object::{BodyHandle, Material, ColliderHandle};
 use nphysics2d::volumetric::Volumetric;
 use nphysics2d::world::World;
-use nphysics2d::algebra::{Inertia2};
+use nphysics2d::algebra::{Inertia2, Velocity2};
 use nphysics_testbed2d::Testbed;
 use nphysics_testbed2d::{GraphicsManager, WorldOwner};
 
@@ -81,11 +84,28 @@ fn test<F: Fn(&mut WorldOwner, &mut GraphicsManager, f32) + 'static>(world: Worl
     testbed.run();
 }
 
-fn main() {
+#[derive(Debug)]
+struct Ball {
+    id: usize,
+    position: Isometry2<f32>,
+    velocity: Velocity2<f32>,
+}
+
+impl Ball {
+    fn new(id: usize, position: Isometry2<f32>, velocity: Velocity2<f32>) -> Ball {
+        Ball {
+            id,
+            position,
+            velocity,
+        }
+    }
+}
+
+fn physics(txBalls: Sender<Vec<Ball>>, txMessages: Sender<String>) {
     let mut world = World::new();
 
     create_ground(&mut world);
-    let balls_handler = create_balls(&mut world, 2);
+    let mut balls_handler = create_balls(&mut world, 2);
 
     let mut balls = HashSet::new();
     for handler in balls_handler.clone() {
@@ -98,26 +118,80 @@ fn main() {
     let body = world.rigid_body_mut(body_handler).unwrap();
     body.set_linear_velocity(Vector2::new(30.0, 30.0));
 
+    println!("[physics] start the simulation.");
+    let ten_millis = time::Duration::from_millis(1000 / 60);
+    for _ in 0..300 {
+        // TODO: make it real 60FPS in the main thread
+        thread::sleep(ten_millis);
+        world.step();
 
-    test(world, move |world_owner, _, _| {
-        let world = world_owner.get_mut();
+        let sync_balls = balls_handler.iter().map(|&handler| {
+            let body_handler = world.collider_body_handle(handler).unwrap();
+            let rigid_body = world.rigid_body_mut(body_handler).unwrap();
 
-        for contact in world.contact_events() {
-            match contact {
-                ContactEvent::Started(handle_a, handle_b) => {
-                    if balls.contains(&handle_a.uid())
-                       && balls.contains(&handle_b.uid()) {
-                        println!("BALL vs BALL!");
-                     }
-                },
-                ContactEvent::Stopped(handle_a, handle_b) => {
-                    if balls.contains(&handle_a.uid())
-                       && balls.contains(&handle_b.uid()) {
-                        // panic!("Done.");
-                     }
+            Ball::new(handler.uid(), rigid_body.position().clone(), rigid_body.velocity().clone())
+        });
+        txBalls.send(sync_balls.collect());
 
-                },
+        txMessages.send(String::from("yo"));
+    }
+
+    println!("[physics] end.");
+    txMessages.send(String::from("end"));
+}
+
+fn main() {
+    let (txMessages, rxMessages) = mpsc::channel();
+    let (txBalls, rxBalls) = mpsc::channel();
+
+    let handle = thread::spawn(move || physics(txBalls, txMessages));
+
+    loop {
+        // - not blocking version
+        // if let Ok(message) = rx.try_recv() {
+        // - blocking version
+        if let Ok(message) = rxMessages.try_recv() {
+            println!("[main] recieve {}!", message);
+
+            if message == "end" {
+                break;
             }
         }
-    })
+
+        if let Ok(sync_balls) = rxBalls.try_recv() {
+            println!("[main] balls! {:?}", sync_balls);
+        }
+    }
+
+    handle.join();
+
+
+    // test(world, move |_,_,_| {
+    //     let mut step = 1;
+
+    //     |world_owner: World<f32>, _, _| {
+    //         step += 1;
+    //         let world = world_owner.get_mut();
+
+    //         println!("{}", step);
+
+    //         for contact in world.contact_events() {
+    //             match contact {
+    //                 ContactEvent::Started(handle_a, handle_b) => {
+    //                     if balls.contains(&handle_a.uid())
+    //                     && balls.contains(&handle_b.uid()) {
+    //                         println!("BALL vs BALL!");
+    //                     }
+    //                 },
+    //                 ContactEvent::Stopped(handle_a, handle_b) => {
+    //                     if balls.contains(&handle_a.uid())
+    //                     && balls.contains(&handle_b.uid()) {
+    //                         // panic!("Done.");
+    //                     }
+
+    //                 },
+    //             }
+    //         }
+    //     }
+    // });
 }
