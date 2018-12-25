@@ -132,8 +132,7 @@ fn physics(txBalls: Sender<Vec<Ball>>, txMessages: Sender<String>) {
             Ball::new(handler.uid(), rigid_body.position().clone(), rigid_body.velocity().clone())
         });
         txBalls.send(sync_balls.collect());
-
-        txMessages.send(String::from("yo"));
+        txMessages.send(String::from("balls"));
     }
 
     println!("[physics] end.");
@@ -147,19 +146,19 @@ fn main() {
     let handle = thread::spawn(move || physics(txBalls, txMessages));
 
     loop {
-        // - not blocking version
-        // if let Ok(message) = rx.try_recv() {
-        // - blocking version
-        if let Ok(message) = rxMessages.try_recv() {
-            println!("[main] recieve {}!", message);
-
-            if message == "end" {
-                break;
+        if let Ok(message) = rxMessages.recv() {
+            match message.as_str() {
+                "balls" => {
+                    let sync_balls = rxBalls.try_recv().unwrap();
+                    println!("[main] balls! {:?}", sync_balls);
+                },
+                "end" => {
+                    break;
+                },
+                message => {
+                    panic!("Unknown message: {}", message);
+                }
             }
-        }
-
-        if let Ok(sync_balls) = rxBalls.try_recv() {
-            println!("[main] balls! {:?}", sync_balls);
         }
     }
 
